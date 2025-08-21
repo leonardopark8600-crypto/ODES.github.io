@@ -4,89 +4,90 @@
   <meta charset="UTF-8">
   <title>Simulador SBML</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+  <script src="https://unpkg.com/cytoscape/dist/cytoscape.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
-  <style>
-    .fade-in { animation: fadeIn 2s ease-in-out; }
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
-  </style>
 </head>
-<body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
+<body class="bg-gray-100">
 
-  <!-- Hero -->
-  <section id="hero" class="flex-1 flex flex-col justify-center items-center text-center">
-    <h1 class="text-5xl md:text-6xl font-bold text-indigo-600 fade-in">Simulador de SBML</h1>
-    <p class="mt-4 text-lg text-gray-500 fade-in">Sube un archivo SBML para comenzar</p>
-    <input id="sbmlFile" type="file" accept=".xml,.sbml" 
-           class="mt-8 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition cursor-pointer fade-in">
-  </section>
+<!-- Pantalla inicial -->
+<section id="hero" class="flex flex-col items-center justify-center h-screen">
+  <h1 class="text-2xl font-bold mb-4">Sube tu archivo SBML</h1>
+  <input id="sbmlFile" type="file" accept=".xml,.sbml" class="mb-4">
+</section>
 
-  <!-- Paso 2: Resumen -->
-  <section id="summary" class="hidden p-6 max-w-3xl mx-auto text-center fade-in">
-    <h2 class="text-2xl font-semibold mb-4">Resumen del modelo</h2>
-    <div id="summary-content" class="bg-white shadow rounded-lg p-4 text-left"></div>
-    <button id="continueBtn" 
-            class="mt-6 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition">
-      Continuar
-    </button>
-  </section>
+<!-- Resumen del modelo -->
+<section id="summary" class="hidden flex flex-col items-center justify-center h-screen">
+  <h2 class="text-xl font-semibold mb-4">Resumen del modelo</h2>
+  <div id="summary-content" class="mb-4 text-gray-700"></div>
+  <button id="continueBtn" class="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700">Continuar</button>
+</section>
 
-  <!-- Paso 3: Menú -->
-  <section id="menu" class="hidden p-6 text-center fade-in">
-    <h2 class="text-2xl font-semibold mb-6">¿Qué deseas hacer?</h2>
-    <div class="flex justify-center gap-6">
-      <button id="btnSim" class="px-6 py-3 bg-indigo-500 text-white rounded-lg shadow hover:bg-indigo-600 transition">
-        Simulación
-      </button>
-      <button id="btnGraph" class="px-6 py-3 bg-yellow-500 text-white rounded-lg shadow hover:bg-yellow-600 transition">
-        Diagrama
-      </button>
-    </div>
-  </section>
+<!-- Menú principal -->
+<section id="menu" class="hidden flex flex-col items-center justify-center h-screen space-y-4">
+  <h2 class="text-xl font-semibold">Selecciona una acción</h2>
+  <button id="btnSim" class="px-4 py-2 bg-green-600 text-white rounded hover:bg-green-700">Simulación</button>
+  <button id="btnGraph" class="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700">Ver grafo</button>
+</section>
 
-  <!-- Simulación -->
-  <section id="sim-view" class="hidden p-6 max-w-6xl mx-auto">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">Simulación</h2>
-      <button onclick="goBack()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">← Regresar</button>
+<!-- Vista de simulación -->
+<section id="sim-view" class="hidden p-0 w-full h-screen flex overflow-hidden">
+
+  <!-- Panel lateral retraíble -->
+  <div id="control-panel" class="w-80 bg-white shadow-lg border-r overflow-y-auto transition-transform duration-300">
+    <div class="flex justify-between items-center bg-indigo-600 text-white p-4">
+      <h2 class="text-lg font-semibold">Controles</h2>
+      <button id="toggle-panel" class="px-2 py-1 bg-indigo-800 rounded hover:bg-indigo-700">⮜</button>
     </div>
 
     <!-- Controles de tiempo -->
-    <div class="grid grid-cols-3 gap-4 mb-6">
-      <div>
-        <label class="block text-sm font-medium">Tiempo final</label>
-        <input id="t_end" type="number" value="50" min="1" class="border rounded p-1 w-full">
-      </div>
-      <div>
-        <label class="block text-sm font-medium">Número de puntos</label>
-        <input id="n_points" type="number" value="200" min="10" class="border rounded p-1 w-full">
-      </div>
+    <div class="p-4 border-b">
+      <h3 class="font-medium mb-2">Tiempo</h3>
+      <label class="block text-sm font-medium">Tiempo final</label>
+      <input id="t_end" type="number" value="50" min="1" class="border rounded p-1 w-full mb-2">
+      <label class="block text-sm font-medium">Número de puntos</label>
+      <input id="n_points" type="number" value="200" min="10" class="border rounded p-1 w-full">
     </div>
 
-    <!-- Sliders -->
-    <div id="sliders" class="grid gap-4 mb-6"></div>
+    <!-- Selector de especies -->
+    <div class="p-4 border-b">
+      <h3 class="font-medium mb-2">Especies</h3>
+      <div id="species-container" class="grid grid-cols-1 gap-1 text-sm"></div>
+    </div>
 
-    <!-- Gráfica -->
-    <div id="plot" class="w-full h-[600px] bg-white rounded shadow p-4"></div>
-  </section>
+    <!-- Sliders de parámetros -->
+    <div class="p-4">
+      <h3 class="font-medium mb-2">Parámetros</h3>
+      <div id="sliders" class="grid gap-3"></div>
+    </div>
+  </div>
 
-  <!-- Diagrama -->
-  <section id="graph-view" class="hidden p-6 max-w-6xl mx-auto">
-    <div class="flex justify-between items-center mb-4">
-      <h2 class="text-xl font-semibold">Diagrama de la red</h2>
+  <!-- Contenedor de la gráfica -->
+  <div class="flex-1 flex flex-col">
+    <div class="flex justify-end bg-gray-100 border-b p-2">
       <button onclick="goBack()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">← Regresar</button>
     </div>
-    <div id="cy" class="w-full h-[700px] bg-white rounded shadow"></div>
-  </section>
+    <div id="plot" class="flex-1 bg-white"></div>
+  </div>
+</section>
+
+<!-- Vista de grafo -->
+<section id="graph-view" class="hidden p-4 w-full h-screen flex flex-col">
+  <div class="flex justify-end mb-2">
+    <button onclick="goBack()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">← Regresar</button>
+  </div>
+  <div id="cy" class="flex-1 border bg-white rounded"></div>
+</section>
 
 <script>
-let backendUrl = "https://backend-2e5l.onrender.com"; // <--- cambia
+let backendUrl = "https://backend-2e5l.onrender.com"; // Cambia a tu URL real
 let parameters = {};
 let species = {};
 let reactions = [];
 let sbmlFile = null;
+let selectedSpecies = [];
+let simTimeout = null;
 
-// File upload → inspección
+// Subida de archivo e inspección
 document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   sbmlFile = e.target.files[0];
   if (!sbmlFile) return;
@@ -100,6 +101,7 @@ document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   parameters = data.parameters;
   species = data.species;
   reactions = data.reactions;
+  selectedSpecies = Object.keys(species);
 
   let summaryHTML = `
     <p><strong>Parámetros:</strong> ${Object.keys(parameters).length}</p>
@@ -112,17 +114,16 @@ document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   document.getElementById("summary").classList.remove("hidden");
 });
 
-// Continue button
 document.getElementById("continueBtn").addEventListener("click", () => {
   document.getElementById("summary").classList.add("hidden");
   document.getElementById("menu").classList.remove("hidden");
 });
 
-// Menu buttons
 document.getElementById("btnSim").addEventListener("click", () => {
   document.getElementById("menu").classList.add("hidden");
   document.getElementById("sim-view").classList.remove("hidden");
   createSliders();
+  createSpeciesSelector();
   simulate();
 });
 
@@ -139,7 +140,21 @@ function goBack() {
   document.getElementById("menu").classList.remove("hidden");
 }
 
-// Sliders
+// Toggle del panel lateral
+document.addEventListener("click", (e) => {
+  if (e.target.id === "toggle-panel") {
+    const panel = document.getElementById("control-panel");
+    if (panel.classList.contains("-translate-x-full")) {
+      panel.classList.remove("-translate-x-full");
+      e.target.textContent = "⮜";
+    } else {
+      panel.classList.add("-translate-x-full");
+      e.target.textContent = "⮞";
+    }
+  }
+});
+
+// Crear sliders
 function createSliders() {
   const container = document.getElementById("sliders");
   container.innerHTML = "";
@@ -149,18 +164,18 @@ function createSliders() {
 
     let label = document.createElement("label");
     label.textContent = pid;
-    label.className = "w-40 text-sm font-medium";
+    label.className = "w-32 text-xs font-medium";
 
     let num = document.createElement("input");
     num.type = "number";
     num.value = val;
     num.step = "any";
-    num.className = "border p-1 rounded w-24";
+    num.className = "border p-1 rounded w-20 text-xs";
 
     let rng = document.createElement("input");
     rng.type = "range";
-    rng.min = val * 0.1;
-    rng.max = val * 2;
+    rng.min = val > 0 ? val * 0.1 : val - 1;
+    rng.max = val > 0 ? val * 2 : val + 1;
     rng.step = val / 100 || 0.01;
     rng.value = val;
     rng.className = "flex-1";
@@ -175,8 +190,31 @@ function createSliders() {
   });
 }
 
+// Selector de especies
+function createSpeciesSelector() {
+  const container = document.getElementById("species-container");
+  container.innerHTML = "";
+  Object.entries(species).forEach(([sid, name]) => {
+    const label = document.createElement("label");
+    label.className = "flex items-center space-x-2";
+    const checkbox = document.createElement("input");
+    checkbox.type = "checkbox";
+    checkbox.checked = true;
+    checkbox.addEventListener("change", () => {
+      if (checkbox.checked) {
+        if (!selectedSpecies.includes(sid)) selectedSpecies.push(sid);
+      } else {
+        selectedSpecies = selectedSpecies.filter(x => x !== sid);
+      }
+      simulate(); 
+    });
+    label.appendChild(checkbox);
+    label.appendChild(document.createTextNode(name));
+    container.appendChild(label);
+  });
+}
+
 // Debounce
-let simTimeout = null;
 function debounceSim() {
   if (simTimeout) clearTimeout(simTimeout);
   simTimeout = setTimeout(simulate, 400);
@@ -194,7 +232,7 @@ async function simulate() {
   formData.append("t_end", t_end);
   formData.append("n_points", n_points);
   formData.append("param_values_json", JSON.stringify(parameters));
-  formData.append("selected_species", Object.keys(species).join(","));
+  formData.append("selected_species", selectedSpecies.join(","));
 
   let resp = await fetch(`${backendUrl}/simulate`, { method: "POST", body: formData });
   let data = await resp.json();
@@ -202,15 +240,18 @@ async function simulate() {
 
   let time = data.data.map(row => row[0]);
   let traces = [];
+
   for (let j = 1; j < data.columns.length; j++) {
+    let sid = data.columns[j];
     let y = data.data.map(row => row[j]);
-    traces.push({ x: time, y: y, mode: "lines", name: data.columns[j] });
+    let name = species[sid] || sid;
+    traces.push({ x: time, y: y, mode: "lines", name: name });
   }
   Plotly.newPlot("plot", traces, { 
     margin: { t: 20 }, 
     xaxis: { title: "Tiempo" }, 
     yaxis: { title: "Concentración" }, 
-    height: 600 
+    height: window.innerHeight - 50 
   });
 }
 
@@ -218,7 +259,7 @@ async function simulate() {
 function drawGraph() {
   if (!reactions.length) return;
   let elements = [];
-  Object.keys(species).forEach(sid => { elements.push({ data: { id: sid, label: species[sid] } }); });
+  Object.entries(species).forEach(([sid, name]) => { elements.push({ data: { id: sid, label: name } }); });
   reactions.forEach(r => {
     r.reactants.forEach(react => { elements.push({ data: { source: react, target: r.id } }); });
     r.products.forEach(prod => { elements.push({ data: { source: r.id, target: prod } }); });
@@ -235,12 +276,13 @@ function drawGraph() {
       { selector: "edge", style: { "width": 2, "line-color": "#9ca3af", "target-arrow-color": "#9ca3af",
         "target-arrow-shape": "triangle" } }
     ],
-    layout: { name: "cose" }
+    layout: { name: "breadthfirst", directed: true, padding: 10 }
   });
 }
 </script>
 </body>
 </html>
+
 
 
 
