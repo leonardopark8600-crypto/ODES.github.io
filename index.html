@@ -2,79 +2,78 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>SBML Viewer</title>
+  <title>Simulador SBML</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    .fade-in {
+      animation: fadeIn 2s ease-in-out;
+    }
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(20px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+  </style>
 </head>
-<body class="bg-gray-100 min-h-screen flex flex-col">
+<body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
 
-  <!-- Header -->
-  <header class="bg-indigo-600 text-white p-4 text-center text-2xl font-bold">
-    Visualizador SBML
-  </header>
+  <!-- Hero -->
+  <section id="hero" class="flex-1 flex flex-col justify-center items-center text-center">
+    <h1 class="text-5xl md:text-6xl font-bold text-indigo-600 fade-in">
+      Simulador de SBML
+    </h1>
+    <p class="mt-4 text-lg text-gray-500 fade-in">
+      Sube un archivo SBML para comenzar
+    </p>
+    <input id="sbmlFile" type="file" accept=".xml,.sbml" 
+           class="mt-8 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition cursor-pointer fade-in">
+  </section>
 
-  <!-- Menu Tabs -->
-  <div class="flex justify-center bg-white shadow">
-    <button id="tab-sim" class="px-6 py-3 font-medium border-b-4 border-indigo-600 text-indigo-600">Simulación</button>
-    <button id="tab-graph" class="px-6 py-3 font-medium border-b-4 border-transparent text-gray-600">Diagrama</button>
-  </div>
+  <!-- Paso 2: Resumen -->
+  <section id="summary" class="hidden p-6 max-w-3xl mx-auto text-center fade-in">
+    <h2 class="text-2xl font-semibold mb-4">Resumen del modelo</h2>
+    <div id="summary-content" class="bg-white shadow rounded-lg p-4 text-left"></div>
+    <button id="continueBtn" 
+            class="mt-6 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition">
+      Continuar
+    </button>
+  </section>
 
-  <!-- Content -->
-  <main class="flex-1 p-6">
-
-    <!-- Simulación -->
-    <div id="sim-view">
-      <div class="mb-4">
-        <label class="block mb-2 font-semibold">Subir archivo SBML:</label>
-        <input id="sbmlFile" type="file" accept=".xml,.sbml" class="p-2 border rounded bg-white">
-      </div>
-
-      <div id="sliders" class="grid gap-4"></div>
-
-      <div id="plot" class="mt-6 bg-white rounded shadow p-4"></div>
+  <!-- Paso 3: Menú -->
+  <section id="menu" class="hidden p-6 text-center fade-in">
+    <h2 class="text-2xl font-semibold mb-6">¿Qué deseas hacer?</h2>
+    <div class="flex justify-center gap-6">
+      <button id="btnSim" class="px-6 py-3 bg-indigo-500 text-white rounded-lg shadow hover:bg-indigo-600 transition">
+        Simulación
+      </button>
+      <button id="btnGraph" class="px-6 py-3 bg-yellow-500 text-white rounded-lg shadow hover:bg-yellow-600 transition">
+        Diagrama
+      </button>
     </div>
+  </section>
 
-    <!-- Diagrama -->
-    <div id="graph-view" class="hidden">
-      <div id="cy" class="w-full h-[600px] bg-white rounded shadow"></div>
-    </div>
+  <!-- Simulación -->
+  <section id="sim-view" class="hidden p-6 max-w-5xl mx-auto">
+    <h2 class="text-xl font-semibold mb-4">Simulación</h2>
+    <div id="sliders" class="grid gap-4"></div>
+    <div id="plot" class="mt-6 bg-white rounded shadow p-4"></div>
+  </section>
 
-  </main>
+  <!-- Diagrama -->
+  <section id="graph-view" class="hidden p-6 max-w-5xl mx-auto">
+    <h2 class="text-xl font-semibold mb-4">Diagrama de la red</h2>
+    <div id="cy" class="w-full h-[600px] bg-white rounded shadow"></div>
+  </section>
 
 <script>
-let backendUrl = "https://tu-backend.onrender.com"; // <--- pon tu URL de Render
+let backendUrl = "https://backend-2e5l.onrender.com"; // <--- cambia por tu backend
 let parameters = {};
 let species = {};
 let reactions = [];
 let sbmlFile = null;
 
-// Tab switching
-const tabSim = document.getElementById("tab-sim");
-const tabGraph = document.getElementById("tab-graph");
-const simView = document.getElementById("sim-view");
-const graphView = document.getElementById("graph-view");
-
-tabSim.addEventListener("click", () => {
-  tabSim.classList.add("border-indigo-600","text-indigo-600");
-  tabSim.classList.remove("border-transparent","text-gray-600");
-  tabGraph.classList.add("border-transparent","text-gray-600");
-  tabGraph.classList.remove("border-indigo-600","text-indigo-600");
-  simView.classList.remove("hidden");
-  graphView.classList.add("hidden");
-});
-
-tabGraph.addEventListener("click", () => {
-  tabGraph.classList.add("border-indigo-600","text-indigo-600");
-  tabGraph.classList.remove("border-transparent","text-gray-600");
-  tabSim.classList.add("border-transparent","text-gray-600");
-  tabSim.classList.remove("border-indigo-600","text-indigo-600");
-  graphView.classList.remove("hidden");
-  simView.classList.add("hidden");
-  drawGraph();
-});
-
-// File upload
+// File upload → inspección
 document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   sbmlFile = e.target.files[0];
   if (!sbmlFile) return;
@@ -82,21 +81,47 @@ document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   let formData = new FormData();
   formData.append("file", sbmlFile);
 
-  let resp = await fetch(`${backendUrl}/inspect`, {
-    method: "POST",
-    body: formData
-  });
+  let resp = await fetch(`${backendUrl}/inspect`, { method: "POST", body: formData });
   let data = await resp.json();
 
   parameters = data.parameters;
   species = data.species;
   reactions = data.reactions;
 
+  // Fill summary
+  let summaryHTML = `
+    <p><strong>Parámetros:</strong> ${Object.keys(parameters).length}</p>
+    <p><strong>Especies:</strong> ${Object.keys(species).length}</p>
+    <p><strong>Reacciones:</strong> ${reactions.length}</p>
+  `;
+  document.getElementById("summary-content").innerHTML = summaryHTML;
+
+  // Show summary
+  document.getElementById("hero").classList.add("hidden");
+  document.getElementById("summary").classList.remove("hidden");
+});
+
+// Continue button
+document.getElementById("continueBtn").addEventListener("click", () => {
+  document.getElementById("summary").classList.add("hidden");
+  document.getElementById("menu").classList.remove("hidden");
+});
+
+// Menu buttons
+document.getElementById("btnSim").addEventListener("click", () => {
+  document.getElementById("menu").classList.add("hidden");
+  document.getElementById("sim-view").classList.remove("hidden");
   createSliders();
   simulate();
 });
 
-// Create sliders
+document.getElementById("btnGraph").addEventListener("click", () => {
+  document.getElementById("menu").classList.add("hidden");
+  document.getElementById("graph-view").classList.remove("hidden");
+  drawGraph();
+});
+
+// Sliders
 function createSliders() {
   const container = document.getElementById("sliders");
   container.innerHTML = "";
@@ -122,16 +147,8 @@ function createSliders() {
     rng.value = val;
     rng.className = "flex-1";
 
-    num.addEventListener("input", () => {
-      rng.value = num.value;
-      parameters[pid] = parseFloat(num.value);
-      debounceSim();
-    });
-    rng.addEventListener("input", () => {
-      num.value = rng.value;
-      parameters[pid] = parseFloat(rng.value);
-      debounceSim();
-    });
+    num.addEventListener("input", () => { rng.value = num.value; parameters[pid] = parseFloat(num.value); debounceSim(); });
+    rng.addEventListener("input", () => { num.value = rng.value; parameters[pid] = parseFloat(rng.value); debounceSim(); });
 
     wrapper.appendChild(label);
     wrapper.appendChild(num);
@@ -147,7 +164,7 @@ function debounceSim() {
   simTimeout = setTimeout(simulate, 400);
 }
 
-// Simulate
+// Simulación
 async function simulate() {
   if (!sbmlFile) return;
   let formData = new FormData();
@@ -158,92 +175,39 @@ async function simulate() {
   formData.append("param_values_json", JSON.stringify(parameters));
   formData.append("selected_species", Object.keys(species).join(","));
 
-  let resp = await fetch(`${backendUrl}/simulate`, {
-    method: "POST",
-    body: formData
-  });
+  let resp = await fetch(`${backendUrl}/simulate`, { method: "POST", body: formData });
   let data = await resp.json();
-
-  if (data.error) {
-    alert("Error: " + data.error);
-    return;
-  }
+  if (data.error) { alert("Error: " + data.error); return; }
 
   let time = data.data.map(row => row[0]);
   let traces = [];
   for (let j = 1; j < data.columns.length; j++) {
     let y = data.data.map(row => row[j]);
-    traces.push({
-      x: time,
-      y: y,
-      mode: "lines",
-      name: data.columns[j]
-    });
+    traces.push({ x: time, y: y, mode: "lines", name: data.columns[j] });
   }
-
-  Plotly.newPlot("plot", traces, {
-    margin: { t: 20 },
-    xaxis: { title: "Tiempo" },
-    yaxis: { title: "Concentración" }
-  });
+  Plotly.newPlot("plot", traces, { margin: { t: 20 }, xaxis: { title: "Tiempo" }, yaxis: { title: "Concentración" } });
 }
 
-// Draw Cytoscape graph
+// Grafo
 function drawGraph() {
   if (!reactions.length) return;
-
   let elements = [];
-
-  // Species as nodes
-  Object.keys(species).forEach(sid => {
-    elements.push({ data: { id: sid, label: species[sid] } });
-  });
-
-  // Reactions as edges
+  Object.keys(species).forEach(sid => { elements.push({ data: { id: sid, label: species[sid] } }); });
   reactions.forEach(r => {
-    r.reactants.forEach(react => {
-      elements.push({ data: { source: react, target: r.id } });
-    });
-    r.products.forEach(prod => {
-      elements.push({ data: { source: r.id, target: prod } });
-    });
-    // reaction node
+    r.reactants.forEach(react => { elements.push({ data: { source: react, target: r.id } }); });
+    r.products.forEach(prod => { elements.push({ data: { source: r.id, target: prod } }); });
     elements.push({ data: { id: r.id, label: r.id }, classes: "reaction" });
   });
-
   cytoscape({
     container: document.getElementById("cy"),
     elements: elements,
     style: [
-      {
-        selector: "node",
-        style: {
-          "label": "data(label)",
-          "text-valign": "center",
-          "color": "#fff",
-          "background-color": "#4f46e5",
-          "text-outline-color": "#4f46e5",
-          "text-outline-width": 2
-        }
-      },
-      {
-        selector: "node.reaction",
-        style: {
-          "shape": "rectangle",
-          "background-color": "#f59e0b",
-          "text-outline-color": "#f59e0b",
-          "color": "#000"
-        }
-      },
-      {
-        selector: "edge",
-        style: {
-          "width": 2,
-          "line-color": "#9ca3af",
-          "target-arrow-color": "#9ca3af",
-          "target-arrow-shape": "triangle"
-        }
-      }
+      { selector: "node", style: { "label": "data(label)", "text-valign": "center", "color": "#fff",
+        "background-color": "#4f46e5", "text-outline-color": "#4f46e5", "text-outline-width": 2 } },
+      { selector: "node.reaction", style: { "shape": "rectangle", "background-color": "#f59e0b",
+        "text-outline-color": "#f59e0b", "color": "#000" } },
+      { selector: "edge", style: { "width": 2, "line-color": "#9ca3af", "target-arrow-color": "#9ca3af",
+        "target-arrow-shape": "triangle" } }
     ],
     layout: { name: "cose" }
   });
@@ -251,5 +215,6 @@ function drawGraph() {
 </script>
 </body>
 </html>
+
 
 
