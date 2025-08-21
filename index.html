@@ -86,13 +86,13 @@
       font-size: 12px;
       margin: 4px 6px 0 0;
     }
-    #plot { height: 520px; }
+    #plot { height: 520px; background: white; }
     .grid {
       display: grid;
       grid-template-columns: repeat(2, minmax(0, 1fr));
       gap: 10px;
     }
-    .species-list { max-height: 210px; overflow: auto; padding-right: 4px; }
+    .species-list { max-height: 210px; overflow: auto; padding-right: 4px; transition: max-height 0.3s ease; }
     .param-row {
       display: grid;
       grid-template-columns: 1.4fr .8fr .8fr;
@@ -100,6 +100,14 @@
     }
     .param-row input[type="range"] { width: 100%; }
     .error { color: #fecaca; font-size: 13px; }
+    .collapsible {
+      cursor: pointer;
+      user-select: none;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+    }
+    .collapsible-content { max-height: 210px; overflow: auto; padding-right: 4px; }
     @media (max-width: 980px){
       main { grid-template-columns: 1fr; }
       #plot { height: 420px; }
@@ -145,8 +153,8 @@
         </div>
       </div>
 
-      <h3 style="margin:8px 0 6px 0">🧬 Especies a graficar</h3>
-      <div id="species" class="species-list"></div>
+      <h3 class="collapsible">🧬 Especies a graficar <span id="toggleSpecies">▼</span></h3>
+      <div id="species" class="collapsible-content"></div>
 
       <h3 style="margin:8px 0 6px 0">⚙️ Parámetros</h3>
       <div id="params" class="stack"></div>
@@ -157,18 +165,23 @@
   </main>
 
   <script>
-    // === CONFIG ===
-    const API = "https://backend-2e5l.onrender.com"; // <- Pega aquí tu URL real de Render
+    const API = "https://backend-2e5l.onrender.com";
 
     let currentFile = null;
-    let parameters = {};  // id -> value
-    let species = {};     // sid -> display name
+    let parameters = {};
+    let species = {};
 
     const el = (id) => document.getElementById(id);
 
-    function fmt(n){
-      return Number(n).toPrecision(6);
+    function debounce(func, wait) {
+      let timeout;
+      return (...args) => {
+        clearTimeout(timeout);
+        timeout = setTimeout(() => func.apply(this, args), wait);
+      };
     }
+
+    function fmt(n){ return Number(n).toPrecision(6); }
 
     function paramsUI(){
       const wrap = el("params");
@@ -188,8 +201,11 @@
         `;
         const num = row.children[1];
         const rng = row.children[2];
-        num.addEventListener("input", () => { rng.value = num.value; parameters[pid] = parseFloat(num.value); });
-        rng.addEventListener("input", () => { num.value = rng.value; parameters[pid] = parseFloat(rng.value); });
+        const autoSim = debounce(() => simulate(), 300);
+
+        num.addEventListener("input", () => { rng.value = num.value; parameters[pid] = parseFloat(num.value); autoSim(); });
+        rng.addEventListener("input", () => { num.value = rng.value; parameters[pid] = parseFloat(rng.value); autoSim(); });
+
         wrap.appendChild(row);
       }
     }
@@ -207,7 +223,7 @@
         lab.className = "chip";
         const chk = document.createElement("input");
         chk.type = "checkbox"; chk.checked = defaultSel.includes(sid);
-        chk.addEventListener("change", ()=>{});
+        chk.addEventListener("change", debounce(simulate, 300));
         lab.appendChild(chk);
         lab.appendChild(document.createTextNode(" " + name));
         lab.dataset.sid = sid;
@@ -216,13 +232,10 @@
     }
 
     function getSelectedSpecies(){
-      const chips = [...document.querySelectorAll("#species .chip")];
-      const sel = [];
-      for(const chip of chips){
+      return [...document.querySelectorAll("#species .chip")].filter(chip=>{
         const chk = chip.querySelector("input[type=checkbox]");
-        if(chk && chk.checked) sel.push(chip.dataset.sid);
-      }
-      return sel;
+        return chk && chk.checked;
+      }).map(chip=>chip.dataset.sid);
     }
 
     function plotSimulation(columns, data){
@@ -236,8 +249,8 @@
         traces.push({ x, y, mode: "lines", name });
       }
       Plotly.newPlot("plot", traces, {
-        paper_bgcolor: "rgba(0,0,0,0)",
-        plot_bgcolor: "rgba(0,0,0,0)",
+        paper_bgcolor: "white",
+        plot_bgcolor: "white",
         margin: {l: 50, r: 25, t: 20, b: 40},
         xaxis: { title: "Tiempo" },
         yaxis: { title: "Concentración" },
@@ -251,14 +264,11 @@
       if(!f){ el("error").textContent = "Sube un archivo SBML."; return; }
       currentFile = f;
 
-      const fd = new FormData();
-      fd.append("file", f);
+      const fd = new FormData(); fd.append("file", f);
       const res = await fetch(API + "/inspect", { method: "POST", body: fd });
       const body = await res.json();
-      if(!res.ok){
-        el("error").textContent = body.error || "Error al inspeccionar.";
-        return;
-      }
+      if(!res.ok){ el("error").textContent = body.error || "Error al inspeccionar."; return; }
+
       parameters = body.parameters || {};
       species = body.species || {};
       el("meta").textContent = `Parámetros: ${Object.keys(parameters).length} · Especies: ${Object.keys(species).length}`;
@@ -275,23 +285,31 @@
       fd.append("t_start", el("t_start").value);
       fd.append("t_end", el("t_end").value);
       fd.append("n_points", el("n_points").value);
-
-      const sel = getSelectedSpecies();
-      fd.append("selected_species", sel.join(","));
-
+      fd.append("selected_species", getSelectedSpecies().join(","));
       fd.append("param_values_json", JSON.stringify(parameters));
 
       const res = await fetch(API + "/simulate", { method: "POST", body: fd });
       const body = await res.json();
-      if(!res.ok){
-        el("errorPlot").textContent = body.error || "Error en simulación.";
-        return;
-      }
+      if(!res.ok){ el("errorPlot").textContent = body.error || "Error en simulación."; return; }
       plotSimulation(body.columns, body.data);
     }
 
     el("btnInspect").addEventListener("click", inspect);
     el("btnSim").addEventListener("click", simulate);
+
+    // Collapsible species
+    const collHeader = document.querySelector(".collapsible");
+    const collContent = el("species");
+    const toggle = el("toggleSpecies");
+    collHeader.addEventListener("click", () => {
+      if(collContent.style.maxHeight && collContent.style.maxHeight !== "0px"){
+        collContent.style.maxHeight = "0px";
+        toggle.textContent = "►";
+      } else {
+        collContent.style.maxHeight = "210px";
+        toggle.textContent = "▼";
+      }
+    });
   </script>
 </body>
 </html>
