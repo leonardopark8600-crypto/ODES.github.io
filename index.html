@@ -30,11 +30,12 @@
 </section>
 
 <!-- Vista de simulación -->
-<section id="sim-view" class="hidden p-0 w-full h-screen flex overflow-hidden">
+<section id="sim-view" class="hidden w-full h-screen flex overflow-hidden">
 
   <!-- Panel lateral retraíble -->
-  <div id="control-panel" class="w-80 bg-white shadow-lg border-r overflow-y-auto transition-transform duration-300">
-    <div class="flex justify-between items-center bg-indigo-600 text-white p-4">
+  <div id="control-panel" class="bg-white shadow-lg border-r overflow-y-auto transition-all duration-300 flex flex-col"
+       style="width: 320px; min-width: 20px;">
+    <div class="flex justify-between items-center bg-indigo-600 text-white p-2">
       <h2 class="text-lg font-semibold">Controles</h2>
       <button id="toggle-panel" class="px-2 py-1 bg-indigo-800 rounded hover:bg-indigo-700">⮜</button>
     </div>
@@ -50,12 +51,15 @@
 
     <!-- Selector de especies -->
     <div class="p-4 border-b">
-      <h3 class="font-medium mb-2">Especies</h3>
+      <div class="flex justify-between items-center mb-2">
+        <h3 class="font-medium">Especies</h3>
+        <button id="clearSpecies" class="text-xs px-2 py-1 bg-gray-200 rounded hover:bg-gray-300">Desmarcar todas</button>
+      </div>
       <div id="species-container" class="grid grid-cols-1 gap-1 text-sm"></div>
     </div>
 
     <!-- Sliders de parámetros -->
-    <div class="p-4">
+    <div class="p-4 flex-1">
       <h3 class="font-medium mb-2">Parámetros</h3>
       <div id="sliders" class="grid gap-3"></div>
     </div>
@@ -79,13 +83,14 @@
 </section>
 
 <script>
-let backendUrl = "https://backend-2e5l.onrender.com"; // Cambia a tu URL real
+let backendUrl = "https://backend-2e5l.onrender.com";
 let parameters = {};
 let species = {};
 let reactions = [];
 let sbmlFile = null;
 let selectedSpecies = [];
 let simTimeout = null;
+let panelOpen = true;
 
 // Subida de archivo e inspección
 document.getElementById("sbmlFile").addEventListener("change", async (e) => {
@@ -140,17 +145,16 @@ function goBack() {
   document.getElementById("menu").classList.remove("hidden");
 }
 
-// Toggle del panel lateral
-document.addEventListener("click", (e) => {
-  if (e.target.id === "toggle-panel") {
-    const panel = document.getElementById("control-panel");
-    if (panel.classList.contains("-translate-x-full")) {
-      panel.classList.remove("-translate-x-full");
-      e.target.textContent = "⮜";
-    } else {
-      panel.classList.add("-translate-x-full");
-      e.target.textContent = "⮞";
-    }
+// Toggle panel con borde visible
+document.getElementById("toggle-panel").addEventListener("click", () => {
+  const panel = document.getElementById("control-panel");
+  panelOpen = !panelOpen;
+  if (!panelOpen) {
+    panel.style.width = "20px";
+    document.getElementById("toggle-panel").textContent = "⮞";
+  } else {
+    panel.style.width = "320px";
+    document.getElementById("toggle-panel").textContent = "⮜";
   }
 });
 
@@ -206,12 +210,19 @@ function createSpeciesSelector() {
       } else {
         selectedSpecies = selectedSpecies.filter(x => x !== sid);
       }
-      simulate(); 
+      simulate();
     });
     label.appendChild(checkbox);
     label.appendChild(document.createTextNode(name));
     container.appendChild(label);
   });
+
+  // Desmarcar todas
+  document.getElementById("clearSpecies").onclick = () => {
+    selectedSpecies = [];
+    container.querySelectorAll("input[type=checkbox]").forEach(cb => cb.checked = false);
+    simulate();
+  };
 }
 
 // Debounce
@@ -282,8 +293,3 @@ function drawGraph() {
 </script>
 </body>
 </html>
-
-
-
-
-
