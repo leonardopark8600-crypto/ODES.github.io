@@ -7,25 +7,16 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
   <script src="https://cdn.tailwindcss.com"></script>
   <style>
-    .fade-in {
-      animation: fadeIn 2s ease-in-out;
-    }
-    @keyframes fadeIn {
-      from { opacity: 0; transform: translateY(20px); }
-      to { opacity: 1; transform: translateY(0); }
-    }
+    .fade-in { animation: fadeIn 2s ease-in-out; }
+    @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
   </style>
 </head>
 <body class="bg-gray-50 text-gray-800 flex flex-col min-h-screen">
 
   <!-- Hero -->
   <section id="hero" class="flex-1 flex flex-col justify-center items-center text-center">
-    <h1 class="text-5xl md:text-6xl font-bold text-indigo-600 fade-in">
-      Simulador de SBML
-    </h1>
-    <p class="mt-4 text-lg text-gray-500 fade-in">
-      Sube un archivo SBML para comenzar
-    </p>
+    <h1 class="text-5xl md:text-6xl font-bold text-indigo-600 fade-in">Simulador de SBML</h1>
+    <p class="mt-4 text-lg text-gray-500 fade-in">Sube un archivo SBML para comenzar</p>
     <input id="sbmlFile" type="file" accept=".xml,.sbml" 
            class="mt-8 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg shadow hover:bg-indigo-700 transition cursor-pointer fade-in">
   </section>
@@ -54,20 +45,42 @@
   </section>
 
   <!-- Simulación -->
-  <section id="sim-view" class="hidden p-6 max-w-5xl mx-auto">
-    <h2 class="text-xl font-semibold mb-4">Simulación</h2>
-    <div id="sliders" class="grid gap-4"></div>
-    <div id="plot" class="mt-6 bg-white rounded shadow p-4"></div>
+  <section id="sim-view" class="hidden p-6 max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-semibold">Simulación</h2>
+      <button onclick="goBack()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">← Regresar</button>
+    </div>
+
+    <!-- Controles de tiempo -->
+    <div class="grid grid-cols-3 gap-4 mb-6">
+      <div>
+        <label class="block text-sm font-medium">Tiempo final</label>
+        <input id="t_end" type="number" value="50" min="1" class="border rounded p-1 w-full">
+      </div>
+      <div>
+        <label class="block text-sm font-medium">Número de puntos</label>
+        <input id="n_points" type="number" value="200" min="10" class="border rounded p-1 w-full">
+      </div>
+    </div>
+
+    <!-- Sliders -->
+    <div id="sliders" class="grid gap-4 mb-6"></div>
+
+    <!-- Gráfica -->
+    <div id="plot" class="w-full h-[600px] bg-white rounded shadow p-4"></div>
   </section>
 
   <!-- Diagrama -->
-  <section id="graph-view" class="hidden p-6 max-w-5xl mx-auto">
-    <h2 class="text-xl font-semibold mb-4">Diagrama de la red</h2>
-    <div id="cy" class="w-full h-[600px] bg-white rounded shadow"></div>
+  <section id="graph-view" class="hidden p-6 max-w-6xl mx-auto">
+    <div class="flex justify-between items-center mb-4">
+      <h2 class="text-xl font-semibold">Diagrama de la red</h2>
+      <button onclick="goBack()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400">← Regresar</button>
+    </div>
+    <div id="cy" class="w-full h-[700px] bg-white rounded shadow"></div>
   </section>
 
 <script>
-let backendUrl = "https://backend-2e5l.onrender.com"; // <--- cambia por tu backend
+let backendUrl = "https://backend-2e5l.onrender.com"; // <--- cambia
 let parameters = {};
 let species = {};
 let reactions = [];
@@ -88,7 +101,6 @@ document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   species = data.species;
   reactions = data.reactions;
 
-  // Fill summary
   let summaryHTML = `
     <p><strong>Parámetros:</strong> ${Object.keys(parameters).length}</p>
     <p><strong>Especies:</strong> ${Object.keys(species).length}</p>
@@ -96,7 +108,6 @@ document.getElementById("sbmlFile").addEventListener("change", async (e) => {
   `;
   document.getElementById("summary-content").innerHTML = summaryHTML;
 
-  // Show summary
   document.getElementById("hero").classList.add("hidden");
   document.getElementById("summary").classList.remove("hidden");
 });
@@ -120,6 +131,13 @@ document.getElementById("btnGraph").addEventListener("click", () => {
   document.getElementById("graph-view").classList.remove("hidden");
   drawGraph();
 });
+
+// Volver al menú
+function goBack() {
+  document.getElementById("sim-view").classList.add("hidden");
+  document.getElementById("graph-view").classList.add("hidden");
+  document.getElementById("menu").classList.remove("hidden");
+}
 
 // Sliders
 function createSliders() {
@@ -167,11 +185,14 @@ function debounceSim() {
 // Simulación
 async function simulate() {
   if (!sbmlFile) return;
+  let t_end = parseFloat(document.getElementById("t_end").value) || 50;
+  let n_points = parseInt(document.getElementById("n_points").value) || 200;
+
   let formData = new FormData();
   formData.append("file", sbmlFile);
   formData.append("t_start", 0);
-  formData.append("t_end", 50);
-  formData.append("n_points", 200);
+  formData.append("t_end", t_end);
+  formData.append("n_points", n_points);
   formData.append("param_values_json", JSON.stringify(parameters));
   formData.append("selected_species", Object.keys(species).join(","));
 
@@ -185,7 +206,12 @@ async function simulate() {
     let y = data.data.map(row => row[j]);
     traces.push({ x: time, y: y, mode: "lines", name: data.columns[j] });
   }
-  Plotly.newPlot("plot", traces, { margin: { t: 20 }, xaxis: { title: "Tiempo" }, yaxis: { title: "Concentración" } });
+  Plotly.newPlot("plot", traces, { 
+    margin: { t: 20 }, 
+    xaxis: { title: "Tiempo" }, 
+    yaxis: { title: "Concentración" }, 
+    height: 600 
+  });
 }
 
 // Grafo
@@ -215,6 +241,7 @@ function drawGraph() {
 </script>
 </body>
 </html>
+
 
 
 
