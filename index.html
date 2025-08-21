@@ -1,315 +1,147 @@
-<!doctype html>
+<!DOCTYPE html>
 <html lang="es">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>🧪 Simulador SBML (Frontend)</title>
+  <meta charset="UTF-8">
+  <title>Simulador SBML</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
   <style>
-    :root {
-      --bg: #0b1020;
-      --panel: #131a32;
-      --text: #eef2ff;
-      --muted: #94a3b8;
-      --accent: #7c3aed;
-      --accent-2: #22d3ee;
-    }
-    * { box-sizing: border-box; }
-    body {
-      margin: 0;
-      font-family: ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, Ubuntu, Cantarell, Noto Sans, Helvetica Neue, Arial;
-      background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
-      color: var(--text);
-      min-height: 100vh;
-    }
-    header {
-      padding: 18px 24px;
-      display: flex;
-      align-items: center;
-      gap: 14px;
-      background: rgba(255,255,255,0.03);
-      border-bottom: 1px solid rgba(255,255,255,0.08);
-      backdrop-filter: blur(6px);
-      position: sticky; top: 0; z-index: 10;
-    }
-    header h1 { font-size: 20px; margin: 0; font-weight: 700; letter-spacing: .3px; }
-    header .tag { font-size: 12px; color: var(--muted); }
-    main {
-      display: grid;
-      grid-template-columns: 1.6fr 1fr;
-      gap: 18px;
-      padding: 18px;
-    }
-    .card {
-      background: var(--panel);
-      border: 1px solid rgba(255,255,255,0.07);
-      border-radius: 16px;
-      padding: 16px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.25), inset 0 1px 0 rgba(255,255,255,.04);
-    }
-    .stack { display: grid; gap: 12px; }
-    .row { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; }
-    label { font-size: 13px; color: var(--muted); }
-    input[type="number"], input[type="text"], select {
-      background: #0f142a;
-      color: var(--text);
-      border: 1px solid rgba(255,255,255,0.1);
-      border-radius: 10px;
-      padding: 8px 10px;
-      outline: none;
-      width: 100%;
-    }
-    input[type="file"] {
-      border: 1px dashed rgba(255,255,255,0.25);
-      padding: 14px;
-      border-radius: 12px;
-      width: 100%;
-      background: rgba(255,255,255,0.02);
-    }
-    .btn {
-      background: linear-gradient(135deg, var(--accent), var(--accent-2));
-      color: white;
-      border: 0; border-radius: 12px;
-      padding: 10px 14px;
-      font-weight: 700; cursor: pointer;
-      transition: transform .06s ease, box-shadow .2s ease;
-      box-shadow: 0 10px 20px rgba(124,58,237,.25);
-    }
-    .btn:active { transform: translateY(1px); }
-    .muted { color: var(--muted); font-size: 13px; }
-    .chip {
-      display: inline-flex; gap: 8px; align-items: center;
-      background: rgba(255,255,255,0.06);
-      border: 1px solid rgba(255,255,255,0.08);
-      border-radius: 999px;
-      padding: 6px 10px;
-      font-size: 12px;
-      margin: 4px 6px 0 0;
-    }
-    #plot { height: 520px; background: white; }
-    .grid {
-      display: grid;
-      grid-template-columns: repeat(2, minmax(0, 1fr));
-      gap: 10px;
-    }
-    .species-list { max-height: 210px; overflow: auto; padding-right: 4px; transition: max-height 0.3s ease; }
-    .param-row {
-      display: grid;
-      grid-template-columns: 1.4fr .8fr .8fr;
-      gap: 8px; align-items: center;
-    }
-    .param-row input[type="range"] { width: 100%; }
-    .error { color: #fecaca; font-size: 13px; }
-    .collapsible {
-      cursor: pointer;
-      user-select: none;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-    }
-    .collapsible-content { max-height: 210px; overflow: auto; padding-right: 4px; }
-    @media (max-width: 980px){
-      main { grid-template-columns: 1fr; }
-      #plot { height: 420px; }
-    }
+    body { font-family: Arial, sans-serif; margin: 20px; }
+    .slider-container { margin: 10px 0; }
+    .slider-label { margin-right: 10px; }
+    .param-input { width: 80px; }
   </style>
 </head>
 <body>
-  <header>
-    <h1>🧪 Simulador de modelos SBML</h1>
-    <div class="tag">Backend: FastAPI + Tellurium/RoadRunner · Frontend: HTML + JS + Plotly</div>
-  </header>
+  <h1>Simulador SBML</h1>
 
-  <main>
-    <section class="card stack">
-      <div class="row">
-        <div style="flex:1">
-          <label>Archivo SBML</label>
-          <input id="file" type="file" accept=".xml,.sbml" />
-        </div>
-        <button id="btnInspect" class="btn">Inspeccionar</button>
-      </div>
+  <input type="file" id="sbmlFile" accept=".xml,.sbml" />
+  <button id="inspectBtn">Cargar modelo</button>
 
-      <div id="meta" class="muted">Selecciona un archivo y presiona “Inspeccionar” para cargar parámetros y especies.</div>
+  <div id="sliders"></div>
 
-      <div id="plot" class="card"></div>
-      <div id="errorPlot" class="error"></div>
-    </section>
+  <div>
+    <label>Tiempo inicial: <input id="tStart" type="number" value="0"></label>
+    <label>Tiempo final: <input id="tEnd" type="number" value="50"></label>
+    <label>Puntos: <input id="nPoints" type="number" value="200"></label>
+  </div>
 
-    <aside class="card stack">
-      <h3 style="margin:0 0 6px 0">⏱️ Tiempo de simulación</h3>
-      <div class="grid">
-        <div>
-          <label>t inicio</label>
-          <input id="t_start" type="number" step="0.1" value="0" />
-        </div>
-        <div>
-          <label>t final</label>
-          <input id="t_end" type="number" step="0.1" value="50" />
-        </div>
-        <div>
-          <label>n puntos</label>
-          <input id="n_points" type="number" step="1" value="200" />
-        </div>
-      </div>
-
-      <h3 class="collapsible">🧬 Especies a graficar <span id="toggleSpecies">▼</span></h3>
-      <div id="species" class="collapsible-content"></div>
-
-      <h3 style="margin:8px 0 6px 0">⚙️ Parámetros</h3>
-      <div id="params" class="stack"></div>
-
-      <button id="btnSim" class="btn">Simular</button>
-      <div id="error" class="error"></div>
-    </aside>
-  </main>
+  <div id="plot"></div>
 
   <script>
-    const API = "https://backend-2e5l.onrender.com";
+    // 🔹 URL de tu backend en Render
+    const API = "https://tu-backend.onrender.com";
 
     let currentFile = null;
     let parameters = {};
-    let species = {};
+    let species = [];
+    let simulateTimeout = null;
 
-    const el = (id) => document.getElementById(id);
-
-    function debounce(func, wait) {
-      let timeout;
-      return (...args) => {
-        clearTimeout(timeout);
-        timeout = setTimeout(() => func.apply(this, args), wait);
-      };
-    }
-
-    function fmt(n){ return Number(n).toPrecision(6); }
-
-    function paramsUI(){
-      const wrap = el("params");
-      wrap.innerHTML = "";
-      const entries = Object.entries(parameters);
-      if(entries.length === 0){
-        wrap.innerHTML = '<div class="muted">Este modelo no tiene parámetros editables detectados.</div>';
+    document.getElementById("inspectBtn").addEventListener("click", async () => {
+      const fileInput = document.getElementById("sbmlFile");
+      if (!fileInput.files.length) {
+        alert("Sube un archivo SBML primero.");
         return;
       }
-      for(const [pid, val] of entries){
-        const row = document.createElement("div");
-        row.className = "param-row";
-        row.innerHTML = `
-          <label title="${pid}">${pid}</label>
-          <input type="number" step="0.0001" value="${val}"/>
-          <input type="range" min="${val==0? -1 : val*0.1}" max="${val==0? 1 : val*10}" step="0.001" value="${val}"/>
-        `;
-        const num = row.children[1];
-        const rng = row.children[2];
-        const autoSim = debounce(() => simulate(), 300);
+      currentFile = fileInput.files[0];
+      const formData = new FormData();
+      formData.append("file", currentFile);
 
-        num.addEventListener("input", () => { rng.value = num.value; parameters[pid] = parseFloat(num.value); autoSim(); });
-        rng.addEventListener("input", () => { num.value = rng.value; parameters[pid] = parseFloat(rng.value); autoSim(); });
+      const resp = await fetch(`${API}/inspect`, { method: "POST", body: formData });
+      const data = await resp.json();
+      parameters = data.parameters;
+      species = data.species;
 
-        wrap.appendChild(row);
-      }
-    }
-
-    function speciesUI(defaultSel){
-      const wrap = el("species");
-      wrap.innerHTML = "";
-      const entries = Object.entries(species);
-      if(entries.length === 0){
-        wrap.innerHTML = '<div class="muted">No se detectaron especies (o todas son boundary).</div>';
-        return;
-      }
-      for(const [sid, name] of entries){
-        const lab = document.createElement("label");
-        lab.className = "chip";
-        const chk = document.createElement("input");
-        chk.type = "checkbox"; chk.checked = defaultSel.includes(sid);
-        chk.addEventListener("change", debounce(simulate, 300));
-        lab.appendChild(chk);
-        lab.appendChild(document.createTextNode(" " + name));
-        lab.dataset.sid = sid;
-        wrap.appendChild(lab);
-      }
-    }
-
-    function getSelectedSpecies(){
-      return [...document.querySelectorAll("#species .chip")].filter(chip=>{
-        const chk = chip.querySelector("input[type=checkbox]");
-        return chk && chk.checked;
-      }).map(chip=>chip.dataset.sid);
-    }
-
-    function plotSimulation(columns, data){
-      el("errorPlot").textContent = "";
-      const timeIdx = columns.indexOf("time");
-      const traces = [];
-      for(let j=1; j<columns.length; j++){
-        const name = columns[j].replace(/^\[|\]$/g, "");
-        const x = data.map(row => row[timeIdx]);
-        const y = data.map(row => row[j]);
-        traces.push({ x, y, mode: "lines", name });
-      }
-      Plotly.newPlot("plot", traces, {
-        paper_bgcolor: "white",
-        plot_bgcolor: "white",
-        margin: {l: 50, r: 25, t: 20, b: 40},
-        xaxis: { title: "Tiempo" },
-        yaxis: { title: "Concentración" },
-        legend: { orientation: "h" }
-      }, {responsive: true});
-    }
-
-    async function inspect(){
-      el("error").textContent = "";
-      const f = el("file").files[0];
-      if(!f){ el("error").textContent = "Sube un archivo SBML."; return; }
-      currentFile = f;
-
-      const fd = new FormData(); fd.append("file", f);
-      const res = await fetch(API + "/inspect", { method: "POST", body: fd });
-      const body = await res.json();
-      if(!res.ok){ el("error").textContent = body.error || "Error al inspeccionar."; return; }
-
-      parameters = body.parameters || {};
-      species = body.species || {};
-      el("meta").textContent = `Parámetros: ${Object.keys(parameters).length} · Especies: ${Object.keys(species).length}`;
-      speciesUI(body.defaultSelections || Object.keys(species));
-      paramsUI();
-    }
-
-    async function simulate(){
-      el("error").textContent = "";
-      if(!currentFile){ el("error").textContent = "Primero inspecciona un archivo."; return; }
-
-      const fd = new FormData();
-      fd.append("file", currentFile);
-      fd.append("t_start", el("t_start").value);
-      fd.append("t_end", el("t_end").value);
-      fd.append("n_points", el("n_points").value);
-      fd.append("selected_species", getSelectedSpecies().join(","));
-      fd.append("param_values_json", JSON.stringify(parameters));
-
-      const res = await fetch(API + "/simulate", { method: "POST", body: fd });
-      const body = await res.json();
-      if(!res.ok){ el("errorPlot").textContent = body.error || "Error en simulación."; return; }
-      plotSimulation(body.columns, body.data);
-    }
-
-    el("btnInspect").addEventListener("click", inspect);
-    el("btnSim").addEventListener("click", simulate);
-
-    // Collapsible species
-    const collHeader = document.querySelector(".collapsible");
-    const collContent = el("species");
-    const toggle = el("toggleSpecies");
-    collHeader.addEventListener("click", () => {
-      if(collContent.style.maxHeight && collContent.style.maxHeight !== "0px"){
-        collContent.style.maxHeight = "0px";
-        toggle.textContent = "►";
-      } else {
-        collContent.style.maxHeight = "210px";
-        toggle.textContent = "▼";
-      }
+      renderSliders();
+      simulate(); // correr la primera simulación
     });
+
+    function renderSliders() {
+      const container = document.getElementById("sliders");
+      container.innerHTML = "";
+      Object.keys(parameters).forEach(pid => {
+        const val = parameters[pid];
+
+        const div = document.createElement("div");
+        div.className = "slider-container";
+
+        const label = document.createElement("span");
+        label.className = "slider-label";
+        label.textContent = pid;
+
+        const rng = document.createElement("input");
+        rng.type = "range";
+        rng.min = val * 0.1 || 0;
+        rng.max = val * 10 + 1;
+        rng.step = val / 50 || 0.1;
+        rng.value = val;
+
+        const num = document.createElement("input");
+        num.type = "number";
+        num.className = "param-input";
+        num.value = val;
+
+        // Eventos sincronizados + simulación con debounce
+        const updateAndSimulate = (newVal) => {
+          parameters[pid] = parseFloat(newVal);
+          rng.value = newVal;
+          num.value = newVal;
+          triggerSimulate();
+        };
+
+        rng.addEventListener("input", () => updateAndSimulate(rng.value));
+        num.addEventListener("input", () => updateAndSimulate(num.value));
+
+        div.appendChild(label);
+        div.appendChild(rng);
+        div.appendChild(num);
+        container.appendChild(div);
+      });
+    }
+
+    // 🔹 Debounce: esperar 500 ms tras mover slider antes de simular
+    function triggerSimulate() {
+      if (simulateTimeout) clearTimeout(simulateTimeout);
+      simulateTimeout = setTimeout(simulate, 500);
+    }
+
+    async function simulate() {
+      if (!currentFile) return;
+
+      const tStart = parseFloat(document.getElementById("tStart").value);
+      const tEnd = parseFloat(document.getElementById("tEnd").value);
+      const nPoints = parseInt(document.getElementById("nPoints").value);
+
+      const formData = new FormData();
+      formData.append("file", currentFile);
+      formData.append("t_start", tStart);
+      formData.append("t_end", tEnd);
+      formData.append("n_points", nPoints);
+      formData.append("selected_species", Object.keys(species).join(","));
+      formData.append("param_values_json", JSON.stringify(parameters));
+
+      const resp = await fetch(`${API}/simulate`, { method: "POST", body: formData });
+      const data = await resp.json();
+
+      if (data.error) {
+        alert("Error en simulación: " + data.error);
+        return;
+      }
+
+      const timeIdx = data.columns.indexOf("time");
+      const traces = [];
+      data.columns.forEach((col, i) => {
+        if (col === "time") return;
+        traces.push({
+          x: data.data.map(row => row[timeIdx]),
+          y: data.data.map(row => row[i]),
+          mode: "lines",
+          name: col
+        });
+      });
+
+      Plotly.newPlot("plot", traces, { title: "Simulación SBML" });
+    }
   </script>
 </body>
 </html>
+
