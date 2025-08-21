@@ -2,146 +2,254 @@
 <html lang="es">
 <head>
   <meta charset="UTF-8">
-  <title>Simulador SBML</title>
+  <title>SBML Viewer</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .slider-container { margin: 10px 0; }
-    .slider-label { margin-right: 10px; }
-    .param-input { width: 80px; }
-  </style>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
 </head>
-<body>
-  <h1>Simulador SBML</h1>
+<body class="bg-gray-100 min-h-screen flex flex-col">
 
-  <input type="file" id="sbmlFile" accept=".xml,.sbml" />
-  <button id="inspectBtn">Cargar modelo</button>
+  <!-- Header -->
+  <header class="bg-indigo-600 text-white p-4 text-center text-2xl font-bold">
+    Visualizador SBML
+  </header>
 
-  <div id="sliders"></div>
-
-  <div>
-    <label>Tiempo inicial: <input id="tStart" type="number" value="0"></label>
-    <label>Tiempo final: <input id="tEnd" type="number" value="50"></label>
-    <label>Puntos: <input id="nPoints" type="number" value="200"></label>
+  <!-- Menu Tabs -->
+  <div class="flex justify-center bg-white shadow">
+    <button id="tab-sim" class="px-6 py-3 font-medium border-b-4 border-indigo-600 text-indigo-600">Simulación</button>
+    <button id="tab-graph" class="px-6 py-3 font-medium border-b-4 border-transparent text-gray-600">Diagrama</button>
   </div>
 
-  <div id="plot"></div>
+  <!-- Content -->
+  <main class="flex-1 p-6">
 
-  <script>
-    // 🔹 URL de tu backend en Render
-    const API = "https://tu-backend.onrender.com";
+    <!-- Simulación -->
+    <div id="sim-view">
+      <div class="mb-4">
+        <label class="block mb-2 font-semibold">Subir archivo SBML:</label>
+        <input id="sbmlFile" type="file" accept=".xml,.sbml" class="p-2 border rounded bg-white">
+      </div>
 
-    let currentFile = null;
-    let parameters = {};
-    let species = [];
-    let simulateTimeout = null;
+      <div id="sliders" class="grid gap-4"></div>
 
-    document.getElementById("inspectBtn").addEventListener("click", async () => {
-      const fileInput = document.getElementById("sbmlFile");
-      if (!fileInput.files.length) {
-        alert("Sube un archivo SBML primero.");
-        return;
-      }
-      currentFile = fileInput.files[0];
-      const formData = new FormData();
-      formData.append("file", currentFile);
+      <div id="plot" class="mt-6 bg-white rounded shadow p-4"></div>
+    </div>
 
-      const resp = await fetch(`${API}/inspect`, { method: "POST", body: formData });
-      const data = await resp.json();
-      parameters = data.parameters;
-      species = data.species;
+    <!-- Diagrama -->
+    <div id="graph-view" class="hidden">
+      <div id="cy" class="w-full h-[600px] bg-white rounded shadow"></div>
+    </div>
 
-      renderSliders();
-      simulate(); // correr la primera simulación
+  </main>
+
+<script>
+let backendUrl = "https://tu-backend.onrender.com"; // <--- pon tu URL de Render
+let parameters = {};
+let species = {};
+let reactions = [];
+let sbmlFile = null;
+
+// Tab switching
+const tabSim = document.getElementById("tab-sim");
+const tabGraph = document.getElementById("tab-graph");
+const simView = document.getElementById("sim-view");
+const graphView = document.getElementById("graph-view");
+
+tabSim.addEventListener("click", () => {
+  tabSim.classList.add("border-indigo-600","text-indigo-600");
+  tabSim.classList.remove("border-transparent","text-gray-600");
+  tabGraph.classList.add("border-transparent","text-gray-600");
+  tabGraph.classList.remove("border-indigo-600","text-indigo-600");
+  simView.classList.remove("hidden");
+  graphView.classList.add("hidden");
+});
+
+tabGraph.addEventListener("click", () => {
+  tabGraph.classList.add("border-indigo-600","text-indigo-600");
+  tabGraph.classList.remove("border-transparent","text-gray-600");
+  tabSim.classList.add("border-transparent","text-gray-600");
+  tabSim.classList.remove("border-indigo-600","text-indigo-600");
+  graphView.classList.remove("hidden");
+  simView.classList.add("hidden");
+  drawGraph();
+});
+
+// File upload
+document.getElementById("sbmlFile").addEventListener("change", async (e) => {
+  sbmlFile = e.target.files[0];
+  if (!sbmlFile) return;
+
+  let formData = new FormData();
+  formData.append("file", sbmlFile);
+
+  let resp = await fetch(`${backendUrl}/inspect`, {
+    method: "POST",
+    body: formData
+  });
+  let data = await resp.json();
+
+  parameters = data.parameters;
+  species = data.species;
+  reactions = data.reactions;
+
+  createSliders();
+  simulate();
+});
+
+// Create sliders
+function createSliders() {
+  const container = document.getElementById("sliders");
+  container.innerHTML = "";
+  Object.entries(parameters).forEach(([pid, val]) => {
+    let wrapper = document.createElement("div");
+    wrapper.className = "flex items-center space-x-2";
+
+    let label = document.createElement("label");
+    label.textContent = pid;
+    label.className = "w-40 text-sm font-medium";
+
+    let num = document.createElement("input");
+    num.type = "number";
+    num.value = val;
+    num.step = "any";
+    num.className = "border p-1 rounded w-24";
+
+    let rng = document.createElement("input");
+    rng.type = "range";
+    rng.min = val * 0.1;
+    rng.max = val * 2;
+    rng.step = val / 100 || 0.01;
+    rng.value = val;
+    rng.className = "flex-1";
+
+    num.addEventListener("input", () => {
+      rng.value = num.value;
+      parameters[pid] = parseFloat(num.value);
+      debounceSim();
+    });
+    rng.addEventListener("input", () => {
+      num.value = rng.value;
+      parameters[pid] = parseFloat(rng.value);
+      debounceSim();
     });
 
-    function renderSliders() {
-      const container = document.getElementById("sliders");
-      container.innerHTML = "";
-      Object.keys(parameters).forEach(pid => {
-        const val = parameters[pid];
+    wrapper.appendChild(label);
+    wrapper.appendChild(num);
+    wrapper.appendChild(rng);
+    container.appendChild(wrapper);
+  });
+}
 
-        const div = document.createElement("div");
-        div.className = "slider-container";
+// Debounce
+let simTimeout = null;
+function debounceSim() {
+  if (simTimeout) clearTimeout(simTimeout);
+  simTimeout = setTimeout(simulate, 400);
+}
 
-        const label = document.createElement("span");
-        label.className = "slider-label";
-        label.textContent = pid;
+// Simulate
+async function simulate() {
+  if (!sbmlFile) return;
+  let formData = new FormData();
+  formData.append("file", sbmlFile);
+  formData.append("t_start", 0);
+  formData.append("t_end", 50);
+  formData.append("n_points", 200);
+  formData.append("param_values_json", JSON.stringify(parameters));
+  formData.append("selected_species", Object.keys(species).join(","));
 
-        const rng = document.createElement("input");
-        rng.type = "range";
-        rng.min = val * 0.1 || 0;
-        rng.max = val * 10 + 1;
-        rng.step = val / 50 || 0.1;
-        rng.value = val;
+  let resp = await fetch(`${backendUrl}/simulate`, {
+    method: "POST",
+    body: formData
+  });
+  let data = await resp.json();
 
-        const num = document.createElement("input");
-        num.type = "number";
-        num.className = "param-input";
-        num.value = val;
+  if (data.error) {
+    alert("Error: " + data.error);
+    return;
+  }
 
-        // Eventos sincronizados + simulación con debounce
-        const updateAndSimulate = (newVal) => {
-          parameters[pid] = parseFloat(newVal);
-          rng.value = newVal;
-          num.value = newVal;
-          triggerSimulate();
-        };
+  let time = data.data.map(row => row[0]);
+  let traces = [];
+  for (let j = 1; j < data.columns.length; j++) {
+    let y = data.data.map(row => row[j]);
+    traces.push({
+      x: time,
+      y: y,
+      mode: "lines",
+      name: data.columns[j]
+    });
+  }
 
-        rng.addEventListener("input", () => updateAndSimulate(rng.value));
-        num.addEventListener("input", () => updateAndSimulate(num.value));
+  Plotly.newPlot("plot", traces, {
+    margin: { t: 20 },
+    xaxis: { title: "Tiempo" },
+    yaxis: { title: "Concentración" }
+  });
+}
 
-        div.appendChild(label);
-        div.appendChild(rng);
-        div.appendChild(num);
-        container.appendChild(div);
-      });
-    }
+// Draw Cytoscape graph
+function drawGraph() {
+  if (!reactions.length) return;
 
-    // 🔹 Debounce: esperar 500 ms tras mover slider antes de simular
-    function triggerSimulate() {
-      if (simulateTimeout) clearTimeout(simulateTimeout);
-      simulateTimeout = setTimeout(simulate, 500);
-    }
+  let elements = [];
 
-    async function simulate() {
-      if (!currentFile) return;
+  // Species as nodes
+  Object.keys(species).forEach(sid => {
+    elements.push({ data: { id: sid, label: species[sid] } });
+  });
 
-      const tStart = parseFloat(document.getElementById("tStart").value);
-      const tEnd = parseFloat(document.getElementById("tEnd").value);
-      const nPoints = parseInt(document.getElementById("nPoints").value);
+  // Reactions as edges
+  reactions.forEach(r => {
+    r.reactants.forEach(react => {
+      elements.push({ data: { source: react, target: r.id } });
+    });
+    r.products.forEach(prod => {
+      elements.push({ data: { source: r.id, target: prod } });
+    });
+    // reaction node
+    elements.push({ data: { id: r.id, label: r.id }, classes: "reaction" });
+  });
 
-      const formData = new FormData();
-      formData.append("file", currentFile);
-      formData.append("t_start", tStart);
-      formData.append("t_end", tEnd);
-      formData.append("n_points", nPoints);
-      formData.append("selected_species", Object.keys(species).join(","));
-      formData.append("param_values_json", JSON.stringify(parameters));
-
-      const resp = await fetch(`${API}/simulate`, { method: "POST", body: formData });
-      const data = await resp.json();
-
-      if (data.error) {
-        alert("Error en simulación: " + data.error);
-        return;
+  cytoscape({
+    container: document.getElementById("cy"),
+    elements: elements,
+    style: [
+      {
+        selector: "node",
+        style: {
+          "label": "data(label)",
+          "text-valign": "center",
+          "color": "#fff",
+          "background-color": "#4f46e5",
+          "text-outline-color": "#4f46e5",
+          "text-outline-width": 2
+        }
+      },
+      {
+        selector: "node.reaction",
+        style: {
+          "shape": "rectangle",
+          "background-color": "#f59e0b",
+          "text-outline-color": "#f59e0b",
+          "color": "#000"
+        }
+      },
+      {
+        selector: "edge",
+        style: {
+          "width": 2,
+          "line-color": "#9ca3af",
+          "target-arrow-color": "#9ca3af",
+          "target-arrow-shape": "triangle"
+        }
       }
-
-      const timeIdx = data.columns.indexOf("time");
-      const traces = [];
-      data.columns.forEach((col, i) => {
-        if (col === "time") return;
-        traces.push({
-          x: data.data.map(row => row[timeIdx]),
-          y: data.data.map(row => row[i]),
-          mode: "lines",
-          name: col
-        });
-      });
-
-      Plotly.newPlot("plot", traces, { title: "Simulación SBML" });
-    }
-  </script>
+    ],
+    layout: { name: "cose" }
+  });
+}
+</script>
 </body>
 </html>
+
 
