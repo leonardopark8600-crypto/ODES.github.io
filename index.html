@@ -4,159 +4,50 @@
   <meta charset="UTF-8">
   <title>🧪 Simulador SBML</title>
   <script src="https://cdn.plot.ly/plotly-latest.min.js"></script>
-  <script src="https://unpkg.com/roadrunner-js"></script>
-  <style>
-    body { font-family: Arial, sans-serif; margin: 20px; }
-    .container { display: flex; gap: 20px; }
-    .controls { flex: 1; }
-    .plot { flex: 3; }
-    .section { margin-bottom: 20px; }
-    input, select { width: 100%; padding: 5px; margin-top: 5px; }
-  </style>
 </head>
 <body>
-  <h1>🧪 Simulador de modelos SBML</h1>
-  <p>Carga un modelo SBML, ajusta parámetros y simula la dinámica de las especies.</p>
+  <h1>🧪 Simulador SBML</h1>
+  <input type="file" id="fileInput"><br><br>
+  <button onclick="inspectModel()">🔍 Inspeccionar modelo</button>
+  <button onclick="simulateModel()">▶️ Simular</button>
 
-  <!-- Subida de archivo -->
-  <div class="section">
-    <label for="sbmlFile">📂 Cargar archivo SBML:</label>
-    <input type="file" id="sbmlFile" accept=".xml,.sbml" />
-  </div>
+  <h3>Parámetros detectados:</h3>
+  <pre id="params"></pre>
 
-  <!-- Configuración de simulación -->
-  <div class="section">
-    <h3>⏱️ Configuración de tiempo de simulación</h3>
-    <label>Tiempo inicial: <input type="number" id="tStart" value="0"></label><br>
-    <label>Tiempo final: <input type="number" id="tEnd" value="50"></label><br>
-    <label>Número de puntos: <input type="number" id="nPoints" value="200"></label>
-  </div>
+  <div id="plot"></div>
 
-  <div class="container">
-    <!-- Controles -->
-    <div class="controls">
-      <div class="section">
-        <h3>⚙️ Ajuste de parámetros</h3>
-        <div id="params"></div>
-      </div>
+<script>
+const API = "https://tu-backend.onrender.com"; // Cambiar después de desplegar backend
 
-      <div class="section">
-        <h3>🧬 Selección de especies</h3>
-        <div id="species"></div>
-      </div>
+async function inspectModel() {
+  const file = document.getElementById("fileInput").files[0];
+  let formData = new FormData();
+  formData.append("file", file);
 
-      <button id="simulateBtn">▶️ Simular</button>
-    </div>
+  let res = await fetch(API + "/inspect", { method: "POST", body: formData });
+  let data = await res.json();
+  document.getElementById("params").innerText = JSON.stringify(data, null, 2);
+}
 
-    <!-- Gráfica -->
-    <div class="plot">
-      <div id="plot"></div>
-    </div>
-  </div>
+async function simulateModel() {
+  const file = document.getElementById("fileInput").files[0];
+  let formData = new FormData();
+  formData.append("file", file);
 
-  <script>
-    let rr = null;
-    let parameters = {};
-    let species = {};
+  let res = await fetch(API + "/simulate?t_start=0&t_end=50&n_points=200", {
+    method: "POST",
+    body: formData
+  });
+  let data = await res.json();
 
-    // Leer archivo SBML
-    document.getElementById("sbmlFile").addEventListener("change", async function(event) {
-      const file = event.target.files[0];
-      if (!file) return;
-      const text = await file.text();
-
-      rr = new roadrunner.RoadRunner(text);
-
-      // Obtener parámetros
-      parameters = {};
-      rr.model.getGlobalParameterIds().forEach(pid => {
-        parameters[pid] = rr.getValue(pid);
-      });
-
-      // Mostrar sliders de parámetros
-      const paramDiv = document.getElementById("params");
-      paramDiv.innerHTML = "";
-      for (let pid in parameters) {
-        const val = parameters[pid];
-        paramDiv.innerHTML += `
-          <label>${pid}: 
-            <input type="range" id="param_${pid}" min="${val*0.1}" max="${val*10}" step="0.01" value="${val}">
-            <span id="val_${pid}">${val}</span>
-          </label><br>
-        `;
-      }
-
-      // Obtener especies
-      species = {};
-      rr.model.getFloatingSpeciesIds().forEach(sid => {
-        species[sid] = sid;
-      });
-
-      // Mostrar checkboxes de especies
-      const speciesDiv = document.getElementById("species");
-      speciesDiv.innerHTML = "";
-      for (let sid in species) {
-        speciesDiv.innerHTML += `
-          <label>
-            <input type="checkbox" id="spec_${sid}" checked> ${species[sid]}
-          </label><br>
-        `;
-      }
-    });
-
-    // Actualizar valores de parámetros
-    document.addEventListener("input", function(e) {
-      if (e.target.id.startsWith("param_")) {
-        const pid = e.target.id.replace("param_", "");
-        const val = parseFloat(e.target.value);
-        document.getElementById(`val_${pid}`).innerText = val.toFixed(3);
-        if (rr) rr.setValue(pid, val);
-      }
-    });
-
-    // Simulación
-    document.getElementById("simulateBtn").addEventListener("click", function() {
-      if (!rr) {
-        alert("Primero carga un archivo SBML.");
-        return;
-      }
-
-      const tStart = parseFloat(document.getElementById("tStart").value);
-      const tEnd = parseFloat(document.getElementById("tEnd").value);
-      const nPoints = parseInt(document.getElementById("nPoints").value);
-
-      // Selección de especies
-      const selectedSpecies = [];
-      for (let sid in species) {
-        if (document.getElementById(`spec_${sid}`).checked) {
-          selectedSpecies.push(sid);
-        }
-      }
-
-      if (selectedSpecies.length === 0) {
-        alert("Selecciona al menos una especie para graficar.");
-        return;
-      }
-
-      // Simular
-      rr.reset();
-      rr.selections = ["time", ...selectedSpecies.map(sid => `[${sid}]`)];
-      const result = rr.simulate(tStart, tEnd, nPoints);
-
-      // Graficar
-      const traces = [];
-      const time = result.map(row => row[0]);
-      for (let i = 1; i < result[0].length; i++) {
-        const y = result.map(row => row[i]);
-        traces.push({ x: time, y: y, mode: "lines", name: rr.selections[i] });
-      }
-
-      Plotly.newPlot("plot", traces, {
-        xaxis: { title: "Tiempo" },
-        yaxis: { title: "Concentración" },
-        title: "Simulación de especies seleccionadas"
-      });
-    });
-  </script>
+  let traces = [];
+  const time = data.data.map(row => row[0]);
+  for (let j = 1; j < data.colnames.length; j++) {
+    let values = data.data.map(row => row[j]);
+    traces.push({ x: time, y: values, mode: "lines", name: data.colnames[j] });
+  }
+  Plotly.newPlot("plot", traces, { title: "Simulación de especies" });
+}
+</script>
 </body>
 </html>
