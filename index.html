@@ -126,6 +126,7 @@ let selectedSpecies = new Set();
 let chart = null;
 let reactions = [];
 let multiplierOptions = [1, 10, 100, 1000];
+let positions = {}; // NUEVO
 
 // -------- Loader y errores --------
 function showLoader(){ document.getElementById("loader").classList.remove("hidden"); }
@@ -168,6 +169,7 @@ document.getElementById("sbmlFile").addEventListener("change", async (e)=>{
     parameters=data.parameters||{};
     initialConditions=data.initial_conditions||{};
     reactions=data.reactions||[];
+    positions = data.positions || {};   // NUEVO
     defaultParams={...parameters};
     defaultInitials={...initialConditions};
     selectedSpecies=new Set(data.defaultSelections||Object.keys(species));
@@ -333,17 +335,34 @@ function plotData(data){
 function drawGraph(){
   if(!Object.keys(species).length) return;
   let elements=[];
-  Object.keys(species).forEach(id=>elements.push({data:{id:id,label:species[id]}}));
+
+  // Especies con posición si existe
+  Object.keys(species).forEach(id=>{
+    let node = { data:{ id:id, label:species[id] } };
+    if(positions[id]) node.position = positions[id]; // NUEVO
+    elements.push(node);
+  });
+
+  // Reacciones con posición si existe
   reactions.forEach(r=>{
+    let node = { data:{ id:r.id, label:r.id }, classes:"reaction" };
+    if(positions[r.id]) node.position = positions[r.id]; // NUEVO
+    elements.push(node);
+
     r.reactants.forEach(react=>elements.push({data:{source:react,target:r.id}}));
     r.products.forEach(prod=>elements.push({data:{source:r.id,target:prod}}));
-    elements.push({data:{id:r.id,label:r.id},classes:"reaction"});
   });
-  cytoscape({container:document.getElementById("cy"),elements:elements,style:[
-    {selector:"node",style:{"label":"data(label)","text-valign":"center","color":"#fff","background-color":"#4f46e5","text-outline-color":"#4f46e5","text-outline-width":2}},
-    {selector:"node.reaction",style:{"shape":"rectangle","background-color":"#f59e0b","text-outline-color":"#f59e0b","color":"#000"}},
-    {selector:"edge",style:{"width":2,"line-color":"#9ca3af","target-arrow-color":"#9ca3af","target-arrow-shape":"triangle"}}
-  ],layout:{name:"cose"}});
+
+  cytoscape({
+    container:document.getElementById("cy"),
+    elements:elements,
+    style:[
+      {selector:"node",style:{"label":"data(label)","text-valign":"center","color":"#fff","background-color":"#4f46e5","text-outline-color":"#4f46e5","text-outline-width":2}},
+      {selector:"node.reaction",style:{"shape":"rectangle","background-color":"#f59e0b","text-outline-color":"#f59e0b","color":"#000"}},
+      {selector:"edge",style:{"width":2,"line-color":"#9ca3af","target-arrow-color":"#9ca3af","target-arrow-shape":"triangle"}}
+    ],
+    layout: positions && Object.keys(positions).length ? { name:"preset" } : { name:"cose" } // NUEVO
+  });
 }
 
 // -------- Acordeones --------
@@ -378,6 +397,7 @@ document.addEventListener("mouseup",()=>{if(isResizing){isResizing=false;documen
 </script>
 </body>
 </html>
+
 
 
 
