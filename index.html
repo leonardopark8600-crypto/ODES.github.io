@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Simulador SBML</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <script src="https://cdn.tailwindcss.com"></script>
+
+  <!-- Estilos originales (al final para máxima prioridad) -->
+  <style>
+    body { background: #111; color: white; }
+    .accordion-btn { background:#1a1a1a; font-weight:bold; }
+    .accordion-btn:hover { background:#222; }
+    .accordion-content { background:#0d0d0d; }
+    #resizer { cursor: col-resize; }
+  </style>
+</head>
+<body class="flex flex-col min-h-screen">
+
+<!-- Loader (spinner arriba a la derecha) -->
+<div id="loader" class="hidden fixed top-2 right-2 z-50">
+  <div class="w-6 h-6 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+</div>
+
+<!-- Paso 1: Hero -->
+<section id="hero" class="flex-1 flex flex-col justify-center items-center text-center">
+  <h1 class="text-5xl font-bold text-indigo-600">Simulador de SBML</h1>
+  <p class="mt-4 text-lg text-gray-400">Sube un archivo SBML para comenzar</p>
+  <input id="sbmlFile" type="file" accept=".xml,.sbml" 
+         class="mt-8 px-6 py-3 bg-indigo-600 text-white font-medium rounded-lg cursor-pointer">
+</section>
+
+<!-- Paso 2: Menú acción -->
+<section id="menuAction" class="hidden flex flex-col justify-center items-center text-center space-y-6">
+  <h2 class="text-2xl font-semibold mb-6">¿Qué deseas hacer?</h2>
+  <div class="flex gap-6">
+    <button id="btnSim" class="px-6 py-3 bg-green-700 text-white rounded-lg shadow-lg hover:-translate-y-1 transform transition">Simulación</button>
+    <button id="btnGraph" class="px-6 py-3 bg-yellow-500 text-white rounded-lg shadow-lg hover:-translate-y-1 transform transition">Diagrama</button>
+    <button id="btnOpt" class="px-6 py-3 bg-blue-600 text-white rounded-lg shadow-lg hover:-translate-y-1 transform transition">Optimizar</button>
+  </div>
+</section>
+
+<!-- Paso 3: Simulación -->
+<section id="sim-view" class="hidden flex flex-col md:flex-row flex-1 bg-white relative">
+
+  <!-- Panel lateral redimensionable -->
+  <div id="panel" class="bg-black flex-shrink-0 flex flex-col border-r border-gray-700 overflow-y-auto relative" style="width:300px; min-width:200px; max-width:600px;">
+    <div id="resizer" class="absolute top-0 right-0 h-full w-1 bg-gray-700 hover:bg-gray-500"></div>
+    <div class="p-4 text-xl font-bold border-b border-gray-700 flex justify-between items-center">
+      Opciones
+      <button onclick="goBackMenu()" class="text-sm px-2 py-1 bg-gray-700 rounded hover:bg-gray-600">← Volver</button>
+    </div>
+    <div class="flex-1 p-4 space-y-4">
+
+      <!-- Tiempo -->
+      <div>
+        <button class="accordion-btn w-full px-4 py-3 text-lg accordion-trigger">Tiempo</button>
+        <div class="accordion-content p-4 space-y-2 hidden">
+          <label class="block text-sm">Inicio</label>
+          <input type="number" id="tStart" value="0" step="any" class="w-full p-1 bg-gray-900 text-white border border-gray-700 rounded"/>
+          <label class="block text-sm">Fin</label>
+          <input type="number" id="tEnd" value="50" step="any" class="w-full p-1 bg-gray-900 text-white border border-gray-700 rounded"/>
+          <label class="block text-sm">Puntos</label>
+          <input type="number" id="nPoints" value="200" step="1" class="w-full p-1 bg-gray-900 text-white border border-gray-700 rounded"/>
+        </div>
+      </div>
+
+      <!-- Parámetros -->
+      <div>
+        <button class="accordion-btn w-full px-4 py-3 text-lg accordion-trigger flex justify-between items-center">
+          Parámetros
+          <button id="resetParams" class="text-xs px-3 py-1 bg-red-700 rounded hover:bg-red-600">Restaurar</button>
+        </button>
+        <div id="param-sliders" class="accordion-content p-4 grid gap-3 hidden"></div>
+      </div>
+
+      <!-- Condiciones iniciales -->
+      <div>
+        <button class="accordion-btn w-full px-4 py-3 text-lg accordion-trigger flex justify-between items-center">
+          Condiciones iniciales
+          <button id="resetInitConds" class="text-xs px-3 py-1 bg-red-700 rounded hover:bg-red-600">Restaurar</button>
+        </button>
+        <div id="init-conds" class="accordion-content p-4 grid gap-3 hidden"></div>
+      </div>
+
+      <!-- Especies -->
+      <div>
+        <button class="accordion-btn w-full px-4 py-3 text-lg accordion-trigger flex justify-between items-center">
+          Especies
+          <button id="uncheckAll" class="text-xs px-3 py-1 bg-gray-700 rounded hover:bg-gray-600">Desmarcar todo</button>
+        </button>
+        <div id="species-list" class="accordion-content p-4 grid gap-2 hidden"></div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- Gráfica -->
+  <div class="flex-1 relative overflow-hidden h-screen">
+    <canvas id="plot" class="w-full h-full"></canvas>
+    <div id="errorMsg" class="hidden absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-red-400 text-lg font-bold p-4 text-center"></div>
+  </div>
+
+</section>
+
+<!-- Paso 3: Diagrama -->
+<section id="graph-view" class="hidden flex flex-col flex-1 bg-white">
+  <button onclick="goBackMenu()" class="px-4 py-2 bg-gray-300 m-4 rounded hover:bg-gray-400 w-fit">← Regresar</button>
+  <div id="cy" class="flex-1"></div>
+</section>
+
+<!-- Paso 3: Optimizar -->
+<section id="opt-view" class="hidden flex flex-col flex-1 bg-white">
+  <button onclick="goBackMenu()" class="px-4 py-2 bg-gray-300 m-4 rounded hover:bg-gray-400 w-fit">← Regresar</button>
+  <div class="flex-1 flex justify-center items-center">
+    <img src="https://placekitten.com/400/300" class="rounded-lg shadow-lg"/>
+  </div>
+</section>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
+<script src="script.js"></script>
+</body>
+</html>
