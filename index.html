@@ -16,6 +16,11 @@
 </head>
 <body class="flex flex-col min-h-screen">
 
+<!-- Loader (spinner arriba a la derecha) -->
+<div id="loader" class="hidden fixed top-2 right-2 z-50">
+  <div class="w-6 h-6 border-4 border-indigo-500 border-t-transparent rounded-full animate-spin"></div>
+</div>
+
 <!-- Paso 1: Hero -->
 <section id="hero" class="flex-1 flex flex-col justify-center items-center text-center">
   <h1 class="text-5xl font-bold text-indigo-600">Simulador de SBML</h1>
@@ -92,6 +97,7 @@
   <!-- Gráfica -->
   <div class="flex-1 relative overflow-hidden h-screen">
     <canvas id="plot" class="w-full h-full"></canvas>
+    <div id="errorMsg" class="hidden absolute inset-0 flex items-center justify-center bg-black bg-opacity-50 text-red-400 text-lg font-bold p-4 text-center"></div>
   </div>
 
 </section>
@@ -103,12 +109,40 @@
 </section>
 
 <!-- Paso 3: Optimizar -->
-<section id="opt-view" class="hidden flex flex-col flex-1 bg-white">
-  <button onclick="goBackMenu()" class="px-4 py-2 bg-gray-300 m-4 rounded hover:bg-gray-400 w-fit">← Regresar</button>
-  <div class="flex-1 flex justify-center items-center">
-    <img src="https://placekitten.com/400/300" class="rounded-lg shadow-lg"/>
+<section id="opt-view" class="hidden flex flex-col flex-1 bg-white p-6 space-y-6">
+  <button onclick="goBackMenu()" class="px-4 py-2 bg-gray-300 rounded hover:bg-gray-400 w-fit">← Regresar</button>
+
+  <h2 class="text-2xl font-bold text-gray-800">Optimización de parámetros</h2>
+
+  <!-- Subida de datos -->
+  <div class="space-y-2">
+    <label class="block text-sm font-semibold text-gray-700">Archivo Datos (.csv)</label>
+    <input type="file" id="csvFile" accept=".csv" class="p-2 border rounded w-full bg-white text-black">
   </div>
+
+  <!-- Selección de método -->
+  <div class="space-y-2">
+    <label class="block text-sm font-semibold text-gray-700">Método de optimización</label>
+    <select id="optMethod" class="p-2 border rounded w-full bg-white text-black">
+      <option value="numeric">Numérico (Adjoint)</option>
+      <option value="pinn">PINN (Red neuronal)</option>
+    </select>
+  </div>
+
+  <!-- Botón -->
+  <button id="runOpt" class="px-6 py-3 bg-blue-600 text-white rounded-lg shadow hover:bg-blue-700">
+    Ejecutar Optimización
+  </button>
+
+  <!-- Resultados -->
+  <div id="optResults" class="p-4 bg-gray-100 text-black rounded hidden"></div>
+
+  <!-- Gráfica -->
+  <canvas id="optChart" class="bg-white border rounded shadow p-4"></canvas>
 </section>
+
+
+
 
 <script src="https://cdnjs.cloudflare.com/ajax/libs/cytoscape/3.23.0/cytoscape.min.js"></script>
 
@@ -121,28 +155,62 @@ let chart = null;
 let reactions = [];
 let multiplierOptions = [1, 10, 100, 1000];
 
+// -------- Loader y errores --------
+function showLoader(){ document.getElementById("loader").classList.remove("hidden"); }
+function hideLoader(){ document.getElementById("loader").classList.add("hidden"); }
+function showError(msg){
+  const errBox=document.getElementById("errorMsg");
+  errBox.textContent="Error en simulación: "+msg;
+  errBox.classList.remove("hidden");
+}
+function clearError(){
+  const errBox=document.getElementById("errorMsg");
+  errBox.classList.add("hidden");
+  errBox.textContent="";
+}
+
 // -------- Subir archivo --------
 document.getElementById("sbmlFile").addEventListener("change", async (e)=>{
   sbmlFile=e.target.files[0];
   if(!sbmlFile) return;
-  const fd=new FormData(); fd.append("file",sbmlFile);
-  const res=await fetch("https://backend-2e5l.onrender.com/inspect",{method:"POST",body:fd});
-  const data=await res.json();
+  showLoader();
+  try {
+    const fd=new FormData(); fd.append("file",sbmlFile);
+    const res=await fetch("https://backend-2e5l.onrender.com/inspect",{method:"POST",body:fd});
+    const data=await res.json();
 
-  species=data.species||{};
-  parameters=data.parameters||{};
-  initialConditions=data.initial_conditions||{};
-  reactions=data.reactions||[];
-  defaultParams={...parameters};
-  defaultInitials={...initialConditions};
-  selectedSpecies=new Set(data.defaultSelections||Object.keys(species));
+    if(!res.ok || data.error){
+      showError(data.error||"No se pudo leer el archivo SBML.");
+      return;
+    }
 
-  createSliders();
-  createSpeciesSelector();
-  createInitialConditionsEditor();
+    // Validar que se detectó algo
+    if(!Object.keys(data.species||{}).length && !Object.keys(data.parameters||{}).length){
+      showError("El archivo no contiene especies ni parámetros válidos.");
+      return;
+    }
 
-  document.getElementById("hero").classList.add("hidden");
-  document.getElementById("menuAction").classList.remove("hidden");
+    clearError();
+
+    species=data.species||{};
+    parameters=data.parameters||{};
+    initialConditions=data.initial_conditions||{};
+    reactions=data.reactions||[];
+    defaultParams={...parameters};
+    defaultInitials={...initialConditions};
+    selectedSpecies=new Set(data.defaultSelections||Object.keys(species));
+
+    createSliders();
+    createSpeciesSelector();
+    createInitialConditionsEditor();
+
+    document.getElementById("hero").classList.add("hidden");
+    document.getElementById("menuAction").classList.remove("hidden");
+  } catch(err){
+    showError(err.message||err);
+  } finally {
+    hideLoader();
+  }
 });
 
 // -------- Menu acción --------
@@ -247,17 +315,32 @@ document.getElementById("uncheckAll").onclick=()=>{selectedSpecies.clear(); crea
 // -------- Simulación --------
 async function simulate(){
   if(!sbmlFile) return;
-  const fd=new FormData();
-  fd.append("file",sbmlFile);
-  fd.append("t_start",document.getElementById("tStart").value);
-  fd.append("t_end",document.getElementById("tEnd").value);
-  fd.append("n_points",document.getElementById("nPoints").value);
-  fd.append("selected_species",[...selectedSpecies].join(","));
-  fd.append("param_values_json",JSON.stringify(parameters));
-  fd.append("initial_conditions_json",JSON.stringify(initialConditions));
-  const res=await fetch("https://backend-2e5l.onrender.com/simulate",{method:"POST",body:fd});
-  const data=await res.json();
-  plotData(data);
+  showLoader();
+  try{
+    const fd=new FormData();
+    fd.append("file",sbmlFile);
+    fd.append("t_start",document.getElementById("tStart").value);
+    fd.append("t_end",document.getElementById("tEnd").value);
+    fd.append("n_points",document.getElementById("nPoints").value);
+    fd.append("selected_species",[...selectedSpecies].join(","));
+    fd.append("param_values_json",JSON.stringify(parameters));
+    fd.append("initial_conditions_json",JSON.stringify(initialConditions));
+
+    const res=await fetch("https://backend-2e5l.onrender.com/simulate",{method:"POST",body:fd});
+    const data=await res.json();
+
+    if(!res.ok || data.error){
+      showError(data.error||"Error desconocido");
+      return;
+    }
+
+    clearError();
+    plotData(data);
+  }catch(e){
+    showError(e.message||e);
+  }finally{
+    hideLoader();
+  }
 }
 function plotData(data){
   const ctx=document.getElementById("plot").getContext("2d");
@@ -295,9 +378,130 @@ function drawGraph(){
 document.querySelectorAll(".accordion-trigger").forEach(btn=>{
   btn.addEventListener("click",()=>{
     const content=btn.parentElement.querySelector(".accordion-content");
-    if(content){ content.classList.toggle("hidden"); if(chart) setTimeout(()=>chart.resize(),200); }
+    if(content){ 
+      content.classList.toggle("hidden"); 
+      if(chart) setTimeout(()=>chart.resize(),200); 
+    }
   });
 });
+
+// -------- Optimización --------
+document.getElementById("runOpt").onclick = async ()=>{
+  const csvFile = document.getElementById("csvFile").files[0];
+  const method = document.getElementById("optMethod").value;
+  const resultsBox = document.getElementById("optResults");
+  const chartCanvas = document.getElementById("optChart");
+
+  if(!csvFile){
+    alert("Debes seleccionar un archivo CSV de datos.");
+    return;
+  }
+
+  showLoader();
+  try {
+    const fd = new FormData();
+    fd.append("data_file", csvFile);
+    fd.append("method", method);
+
+    const res = await fetch("https://backend-2e5l.onrender.com/optimize",{method:"POST",body:fd});
+    const data = await res.json();
+
+    if(!res.ok || data.error){
+      resultsBox.innerHTML = `<p class="text-red-600 font-bold">Error: ${data.error||"desconocido"}</p>`;
+      resultsBox.classList.remove("hidden");
+      return;
+    }
+
+    // Mostrar parámetros y pérdida
+    let html = `
+      <h3 class="text-xl font-bold mb-2">Resultados</h3>
+      <p><b>Variables detectadas:</b> ${data.variables.join(", ")}</p>
+      <p><b>Loss final:</b> ${data.loss.toFixed(6)}</p>
+      <h4 class="text-lg font-semibold mt-2">Parámetros ajustados:</h4>
+      <ul class="list-disc pl-6">
+        ${Object.entries(data.params).map(([k,v])=>`<li>${k}: ${v.toFixed(6)}</li>`).join("")}
+      </ul>
+    `;
+    resultsBox.innerHTML = html;
+    resultsBox.classList.remove("hidden");
+
+    // ---- Graficar resultados optimizados ----
+    const labels = data.time;
+    const datasets = [];
+
+    // 1. Trayectorias optimizadas
+    for (const [varName, values] of Object.entries(data.trajectories)) {
+      datasets.push({
+        label: `${varName} (optimizado)`,
+        data: values,
+        borderColor: "blue",
+        borderWidth: 2,
+        fill: false
+      });
+    }
+
+    // 2. Datos experimentales
+    const csvText = await csvFile.text();
+    const rows = csvText.split("\n").map(r=>r.split(","));
+    const headers = rows[0];
+    const timeIdx = headers.indexOf("time");
+
+    for (let j=1; j<headers.length; j++){
+      const varName = headers[j];
+      if (!data.variables.includes(varName)) continue;
+      const values = rows.slice(1).map(r=>parseFloat(r[j]));
+      datasets.push({
+        label: `${varName} (datos)`,
+        data: values,
+        borderColor: "red",
+        borderDash: [5,5],
+        borderWidth: 1,
+        fill: false
+      });
+    }
+
+    if(window.optChartInstance){ window.optChartInstance.destroy(); }
+    window.optChartInstance = new Chart(chartCanvas, {
+      type: "line",
+      data: { labels, datasets },
+      options: {
+        responsive: true,
+        interaction: { mode: "index", intersect: false },
+        plugins: { legend: { position: "top" } },
+        scales: { x: { title: { display: true, text: "Tiempo" } } }
+      }
+    });
+
+  } catch(e){
+    resultsBox.innerHTML = `<p class="text-red-600 font-bold">Error: ${e.message}</p>`;
+    resultsBox.classList.remove("hidden");
+  } finally {
+    hideLoader();
+  }
+};
+
+
+
+    // Mostrar resultados
+    let html = `
+      <h3 class="text-xl font-bold mb-2">Resultados</h3>
+      <p><b>Variables detectadas:</b> ${data.variables.join(", ")}</p>
+      <p><b>Loss final:</b> ${data.loss.toFixed(6)}</p>
+      <h4 class="text-lg font-semibold mt-2">Parámetros ajustados:</h4>
+      <ul class="list-disc pl-6">
+        ${Object.entries(data.params).map(([k,v])=>`<li>${k}: ${v.toFixed(6)}</li>`).join("")}
+      </ul>
+    `;
+    resultsBox.innerHTML = html;
+    resultsBox.classList.remove("hidden");
+
+  } catch(e){
+    resultsBox.innerHTML = `<p class="text-red-600 font-bold">Error: ${e.message}</p>`;
+    resultsBox.classList.remove("hidden");
+  } finally {
+    hideLoader();
+  }
+};
 
 // -------- Tiempo dispara simulación --------
 ["tStart","tEnd","nPoints"].forEach(id=>{
@@ -320,4 +524,6 @@ document.addEventListener("mouseup",()=>{if(isResizing){isResizing=false;documen
 </script>
 </body>
 </html>
+
+
 
